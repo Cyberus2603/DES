@@ -10,6 +10,8 @@ https://www.youtube.com/watch?v=Sy0sXa73PZA
 from bitarray import bitarray
 import struct
 import PySimpleGUI as Sg
+import sys
+import argparse
 
 # Tables of key permutation
 key_transpose_table_pc1 = [57, 49, 41, 33, 25, 17, 9,
@@ -276,83 +278,147 @@ if __name__ == '__main__':
     fix_indexes_for_table(permutation_table)
     fix_indexes_for_table(final_permutation_table)
 
-    Sg.theme('Dark Blue 3')  # please make your windows colorful
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-k', help="8 ascii character key", type=str)
+    parser.add_argument('-e', help="Value to encrypt", type=str)
+    parser.add_argument('-d', help="Value to decrypt", type=str)
+    args = parser.parse_args()
 
-    col = [[Sg.Text('Text (in lowercase hex to decode):', size=(26, 1)), Sg.InputText(key='text', size=(32, 1))],
-           [Sg.Text('Key (8 ascii characters):', size=(26, 1)), Sg.InputText(key='key', size=(32, 1))],
-           [Sg.Text('Result:', size=(26, 1)), Sg.InputText(key="out", size=(32, 1))]]
-    layout = [[Sg.Column(col)], [Sg.Button("Encrypt"), Sg.Button("Decrypt")]]
-
-    window = Sg.Window('DES (ascii only)', layout)
-
-    while True:
-        event, values = window.read(10)
-        if event is Sg.WIN_CLOSED:
-            break
-        if event == "Encrypt":
-            window['text'].Update(background_color="white")
-            window['key'].Update(background_color="white")
-            val_ok = True
-            if len(values['key']) != 8:
-                window['key'].Update(background_color="red")
-                val_ok = False
-            if val_ok:
-                encrypted = ''
-                text = values["text"]
-                blocks = len(text)
-                if blocks % 8 != 0:
-                    blocks = int(blocks/8) + 1
-                    padding = int(8 - (blocks % 8))
-                    for block in range(0, padding):
-                        text += "\0"
-                else:
-                    blocks = int(blocks / 8)
-                in_key = bitarray()
+    if (args.k is not None) and ((args.e is not None) or (args.d is not None)):
+        if len(args.k) != 8:
+            print("Incorrect key")
+            sys.exit(1)
+        if (args.e is not None) and (args.d is not None):
+            print("Incorrect arguments")
+            sys.exit(1)
+        if args.e is not None:
+            encrypted = ''
+            text = args.e
+            blocks = len(text)
+            if blocks % 8 != 0:
+                blocks = int(blocks / 8) + 1
+                padding = int(8 - (blocks % 8))
+                for block in range(0, padding):
+                    text += "\0"
+            else:
+                blocks = int(blocks / 8)
+            in_key = bitarray()
+            try:
+                in_key.frombytes(bytes(args.k, encoding="ascii"))
+            except UnicodeEncodeError:
+                print("Incorrect key")
+                sys.exit(1)
+            for block in range(0, blocks):
+                value = bitarray()
                 try:
-                    in_key.frombytes(bytes(values["key"], encoding="ascii"))
+                    value.frombytes(bytes(text[0 + block * 8: 8 + block * 8], encoding="ascii"))
                 except UnicodeEncodeError:
-                    window['key'].Update(background_color="red")
-                    continue
-                no_print = False
-                for block in range(0, blocks):
-                    value = bitarray()
-                    try:
-                        value.frombytes(bytes(text[0 + block * 8: 8 + block * 8], encoding="ascii"))
-                    except UnicodeEncodeError:
-                        window['text'].Update(background_color="red")
-                        no_print = True
-                        break
-                    encrypted += encrypt(value, in_key)
-                if not no_print:
-                    window['out'].Update(value=encrypted)
+                    print("Incorrect value to encrypt")
+                    sys.exit(1)
+                encrypted += encrypt(value, in_key)
+            print(encrypted)
 
-        if event == "Decrypt":
-            window['text'].Update(background_color="white")
-            window['key'].Update(background_color="white")
-            val_ok = True
-            if len(values['key']) != 8:
-                window['key'].Update(background_color="red")
-                val_ok = False
-            if len(values['text']) % 16 != 0:
-                window['text'].Update(background_color="red")
-                val_ok = False
-            for letter in values['text']:
+        if args.d is not None:
+            if len(args.d) % 16 != 0:
+                print("Incorrect value to decrypt")
+                sys.exit(1)
+            for letter in args.d:
                 if not (('0' <= letter <= '9') or ('a' <= letter <= 'f')):
                     val_ok = False
-                    window['text'].Update(background_color="red")
-            if val_ok:
-                decrypted = ''
-                text = values["text"]
-                blocks = len(text)
-                blocks = int(blocks / 16)
-                in_key = bitarray()
-                try:
-                    in_key.frombytes(bytes(values["key"], encoding="ascii"))
-                except UnicodeEncodeError:
-                    window['key'].Update(background_color="red")
-                    continue
-                for block in range(0, blocks):
-                    value = text[0 + block * 16: 16 + block * 16]
-                    decrypted += decrypt(value, in_key)
-                window['out'].Update(value=decrypted)
+                    print("Incorrect value to decrypt")
+                    sys.exit(1)
+            decrypted = ''
+            text = args.d
+            blocks = len(text)
+            blocks = int(blocks / 16)
+            in_key = bitarray()
+            try:
+                in_key.frombytes(bytes(args.k, encoding="ascii"))
+            except UnicodeEncodeError:
+                print("Incorrect key")
+                sys.exit(1)
+            for block in range(0, blocks):
+                value = text[0 + block * 16: 16 + block * 16]
+                decrypted += decrypt(value, in_key)
+            print(decrypted)
 
+    else:
+        Sg.theme('Dark Blue 3')  # please make your windows colorful
+
+        col = [[Sg.Text('Text (in lowercase hex to decode):', size=(26, 1)), Sg.InputText(key='text', size=(32, 1))],
+               [Sg.Text('Key (8 ascii characters):', size=(26, 1)), Sg.InputText(key='key', size=(32, 1))],
+               [Sg.Text('Result:', size=(26, 1)), Sg.InputText(key="out", size=(32, 1))]]
+        layout = [[Sg.Column(col)], [Sg.Button("Encrypt"), Sg.Button("Decrypt")]]
+
+        window = Sg.Window('DES (ascii only)', layout)
+
+        while True:
+            event, values = window.read(10)
+            if event is Sg.WIN_CLOSED:
+                break
+            if event == "Encrypt":
+                window['text'].Update(background_color="white")
+                window['key'].Update(background_color="white")
+                val_ok = True
+                if len(values['key']) != 8:
+                    window['key'].Update(background_color="red")
+                    val_ok = False
+                if val_ok:
+                    encrypted = ''
+                    text = values["text"]
+                    blocks = len(text)
+                    if blocks % 8 != 0:
+                        blocks = int(blocks / 8) + 1
+                        padding = int(8 - (blocks % 8))
+                        for block in range(0, padding):
+                            text += "\0"
+                    else:
+                        blocks = int(blocks / 8)
+                    in_key = bitarray()
+                    try:
+                        in_key.frombytes(bytes(values["key"], encoding="ascii"))
+                    except UnicodeEncodeError:
+                        window['key'].Update(background_color="red")
+                        continue
+                    no_print = False
+                    for block in range(0, blocks):
+                        value = bitarray()
+                        try:
+                            value.frombytes(bytes(text[0 + block * 8: 8 + block * 8], encoding="ascii"))
+                        except UnicodeEncodeError:
+                            window['text'].Update(background_color="red")
+                            no_print = True
+                            break
+                        encrypted += encrypt(value, in_key)
+                    if not no_print:
+                        window['out'].Update(value=encrypted)
+
+            if event == "Decrypt":
+                window['text'].Update(background_color="white")
+                window['key'].Update(background_color="white")
+                val_ok = True
+                if len(values['key']) != 8:
+                    window['key'].Update(background_color="red")
+                    val_ok = False
+                if len(values['text']) % 16 != 0:
+                    window['text'].Update(background_color="red")
+                    val_ok = False
+                for letter in values['text']:
+                    if not (('0' <= letter <= '9') or ('a' <= letter <= 'f')):
+                        val_ok = False
+                        window['text'].Update(background_color="red")
+                if val_ok:
+                    decrypted = ''
+                    text = values["text"]
+                    blocks = len(text)
+                    blocks = int(blocks / 16)
+                    in_key = bitarray()
+                    try:
+                        in_key.frombytes(bytes(values["key"], encoding="ascii"))
+                    except UnicodeEncodeError:
+                        window['key'].Update(background_color="red")
+                        continue
+                    for block in range(0, blocks):
+                        value = text[0 + block * 16: 16 + block * 16]
+                        decrypted += decrypt(value, in_key)
+                    window['out'].Update(value=decrypted)
